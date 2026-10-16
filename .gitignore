@@ -1,0 +1,34 @@
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node.js
+node_modules/
+dist/
+build/
+coverage/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Local Kubernetes configuration
+kind-config.local.yaml
