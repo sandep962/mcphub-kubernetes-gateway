@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcphub-inventory-mcp
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: mcphub-inventory-mcp
+  template:
+    metadata:
+      labels:
+        app: mcphub-inventory-mcp
+    spec:
+      containers:
+        - name: server
+          image: {{ .Values.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8002
+          env:
+            - name: MCPHUB_DB_HOST
+              value: mcphub-mariadb.mcphub.svc.cluster.local
+            - name: MCPHUB_DB_PORT
+              value: "3306"
+            - name: MCPHUB_DB_NAME
+              value: mcphub
+            - name: MCPHUB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mcphub-metadata-secret
+                  key: username
+            - name: MCPHUB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mcphub-metadata-secret
+                  key: password
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

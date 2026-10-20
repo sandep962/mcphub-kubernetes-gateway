@@ -1,0 +1,1 @@
+"""Shared MCPHub infrastructure code."""

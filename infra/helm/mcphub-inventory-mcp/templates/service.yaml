@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcphub-inventory-mcp
+  namespace: {{ .Values.namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: mcphub-inventory-mcp
+  ports:
+    - name: http
+      port: {{ .Values.servicePort }}
+      targetPort: http

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcphub-support-mcp
+  labels:
+    app: mcphub-support-mcp
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: mcphub-support-mcp
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: 8003
+      protocol: TCP

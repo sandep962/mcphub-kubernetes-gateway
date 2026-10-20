@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcphub-gateway
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: mcphub-gateway
+  template:
+    metadata:
+      labels:
+        app: mcphub-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: {{ .Values.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: MCPHUB_DB_HOST
+              value: mcphub-mariadb.mcphub.svc.cluster.local
+            - name: MCPHUB_DB_PORT
+              value: "3306"
+            - name: MCPHUB_DB_NAME
+              value: mcphub
+            - name: MCPHUB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mcphub-metadata-secret
+                  key: username
+            - name: MCPHUB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mcphub-metadata-secret
+                  key: password
+            - name: WOOCOMMERCE_MCP_URL
+              value: {{ .Values.woocommerceMcpUrl | quote }}
+            - name: INVENTORY_MCP_URL
+              value: {{ .Values.inventoryMcpUrl | quote }}
+            - name: SUPPORT_MCP_URL
+              value: {{ .Values.supportMcpUrl | quote }}
+            - name: MCPHUB_LLM_BASE_URL
+              value: {{ .Values.llm.baseUrl | quote }}
+            - name: MCPHUB_LLM_MODEL
+              value: {{ .Values.llm.model | quote }}
+            - name: MCPHUB_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.apiKeySecretName | quote }}
+                  key: {{ .Values.llm.apiKeySecretKey | quote }}
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+

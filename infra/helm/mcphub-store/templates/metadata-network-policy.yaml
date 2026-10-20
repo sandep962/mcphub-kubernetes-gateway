@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcphub-mariadb-ingress
+  namespace: {{ .Values.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: mcphub-mariadb
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: mcphub-wordpress
+        - podSelector:
+            matchLabels:
+              app: mcphub-gateway
+        - podSelector:
+            matchLabels:
+              app: mcphub-inventory-mcp
+        - podSelector:
+            matchLabels:
+              app: mcphub-support-mcp
+        - podSelector:
+            matchLabels:
+              app: mcphub-db-provisioner
+      ports:
+        - protocol: TCP
+          port: 3306

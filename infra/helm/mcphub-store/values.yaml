@@ -1,0 +1,25 @@
+﻿namespace: mcphub
+storageClassName: standard
+wordpress:
+  image: mcphub-wordpress:local
+  replicas: 1
+  servicePort: 80
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+mariadb:
+  image: mariadb:11.4
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+

@@ -1,0 +1,11 @@
+namespace: mcphub
+replicas: 2
+image: mcphub-inventory-mcp:persistent-v2
+servicePort: 8002
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

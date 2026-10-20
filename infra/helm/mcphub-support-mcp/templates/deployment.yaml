@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcphub-support-mcp
+  labels:
+    app: mcphub-support-mcp
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: mcphub-support-mcp
+  template:
+    metadata:
+      labels:
+        app: mcphub-support-mcp
+    spec:
+      containers:
+        - name: support-mcp
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8003
+              protocol: TCP
+          env:
+            - name: MCPHUB_DB_HOST
+              value: mcphub-mariadb.mcphub.svc.cluster.local
+            - name: MCPHUB_DB_PORT
+              value: "3306"
+            - name: MCPHUB_DB_NAME
+              value: mcphub
+            - name: MCPHUB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mcphub-metadata-secret
+                  key: username
+            - name: MCPHUB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mcphub-metadata-secret
+                  key: password
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop:
+                - ALL

@@ -1,0 +1,40 @@
+deployment:
+  kind: Deployment
+  replicas: 1
+
+# Use only the stable Kubernetes Ingress API. Keep provider scope to MCPHub.
+providers:
+  kubernetesCRD:
+    enabled: false
+  kubernetesIngress:
+    enabled: true
+    ingressClass: mcphub-traefik
+    namespaces:
+      - mcphub
+  kubernetesGateway:
+    enabled: false
+
+gateway:
+  enabled: false
+gatewayClass:
+  enabled: false
+
+ingressClass:
+  enabled: true
+  isDefaultClass: false
+  name: mcphub-traefik
+
+# The cluster node has no host HTTP port mappings; clients use the local
+# kubectl port-forward managed by scripts/start-local-ports.ps1.
+service:
+  enabled: true
+  spec:
+    type: ClusterIP
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

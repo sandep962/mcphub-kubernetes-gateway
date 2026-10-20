@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcphub-dashboard
+  namespace: {{ .Values.namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: mcphub-dashboard
+  ports:
+    - name: http
+      port: {{ .Values.servicePort }}
+      targetPort: http

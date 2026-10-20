@@ -1,0 +1,17 @@
+replicaCount: 2
+namespace: mcphub
+
+image: mcphub-support-mcp:persistent-v2
+imagePullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8003
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

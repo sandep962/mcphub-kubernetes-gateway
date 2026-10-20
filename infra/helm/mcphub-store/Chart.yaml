@@ -1,0 +1,6 @@
+﻿apiVersion: v2
+name: mcphub-store
+description: WordPress and MariaDB for the MCPHub WooCommerce store
+type: application
+version: 0.1.0
+appVersion: "6.8"

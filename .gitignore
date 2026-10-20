@@ -32,3 +32,8 @@ temp/
 
 # Local Kubernetes configuration
 kind-config.local.yaml
+.secrets/
+.local/
+infra/helm/**/values-private.yaml
+
+infra/helm/mcphub-store/values-local.yaml

@@ -1,0 +1,15 @@
+namespace: mcphub
+ingressClassName: mcphub-traefik
+routes:
+  - name: storefront
+    host: storefront.mcphub.test
+    serviceName: mcphub-wordpress
+    servicePort: 80
+  - name: dashboard
+    host: dashboard.mcphub.test
+    serviceName: mcphub-dashboard
+    servicePort: 8080
+localCatchAll:
+  enabled: true
+  serviceName: mcphub-wordpress
+  servicePort: 80
