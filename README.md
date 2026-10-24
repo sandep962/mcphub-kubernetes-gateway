@@ -24,7 +24,7 @@ The assessment demo runs on an Azure Ubuntu VM using k3s, Helm, and Traefik. Its
 | Service | HTTPS URL | Ingress destination |
 |---|---|---|
 | Dashboard | <https://sandeep-mcp-demo.duckdns.org/dashboard> | `mcphub-dashboard:8080` at `/dashboard` |
-| Storefront | <https://sandeep-mcp-demo.duckdns.org/> | `mcphub-wordpress:80` at `/` |
+| Storefront | <https://sandeep-mcp-demo.duckdns.org/shop/> | `mcphub-wordpress:80` at `/` |
 | MCP endpoint | <https://sandeep-mcp-demo.duckdns.org/mcp> | `mcphub-gateway:8000` at `/mcp` |
 | WordPress / WooCommerce admin | <https://sandeep-mcp-demo.duckdns.org/wp-admin/> | WordPress storefront service |
 
