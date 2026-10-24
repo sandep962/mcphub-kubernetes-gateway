@@ -13,14 +13,20 @@ spec:
       labels:
         app: mcphub-gateway
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: gateway
           image: {{ .Values.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
           ports:
             - name: http
               containerPort: 8000
           env:
+            - name: MCPHUB_AUTO_MIGRATE
+              value: {{ .Values.database.autoMigrate | quote }}
             - name: MCPHUB_DB_HOST
               value: mcphub-mariadb.mcphub.svc.cluster.local
             - name: MCPHUB_DB_PORT
@@ -43,6 +49,12 @@ spec:
               value: {{ .Values.inventoryMcpUrl | quote }}
             - name: SUPPORT_MCP_URL
               value: {{ .Values.supportMcpUrl | quote }}
+            - name: MCPHUB_UPSTREAM_TOOL_CALL_TIMEOUT_SECONDS
+              value: {{ .Values.upstreamToolCallTimeoutSeconds | quote }}
+            - name: MCPHUB_OAUTH_ISSUER
+              value: {{ .Values.oauth.issuerUrl | quote }}
+            - name: MCPHUB_MCP_RESOURCE
+              value: {{ .Values.oauth.resourceUrl | quote }}
             - name: MCPHUB_LLM_BASE_URL
               value: {{ .Values.llm.baseUrl | quote }}
             - name: MCPHUB_LLM_MODEL

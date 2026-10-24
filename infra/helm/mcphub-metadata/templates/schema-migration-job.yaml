@@ -1,0 +1,63 @@
+{{- if .Values.schemaMigration.enabled }}
+{{- if not (regexMatch "^[1-9][0-9]{0,5}$" (toString .Values.schemaMigration.version)) }}
+{{- fail "schemaMigration.version must be a positive integer with at most six digits" }}
+{{- end }}
+{{- $runId := toString (.Values.schemaMigration.runId | default "") }}
+{{- if and $runId (not (regexMatch "^[a-z0-9]([-a-z0-9]{0,20}[a-z0-9])?$" $runId)) }}
+{{- fail "schemaMigration.runId must be a lowercase DNS-safe suffix of at most 22 characters" }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mcphub-schema-migration-v{{ .Values.schemaMigration.version }}{{ if $runId }}-{{ $runId }}{{ end }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: mcphub-schema-migration
+    mcphub.io/schema-version: {{ .Values.schemaMigration.version | quote }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: mcphub-schema-migration
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: schema-migration
+          image: {{ .Values.provisionerImage | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
+          command: ["python", "-m", "apps.shared.migrate_database"]
+          env:
+            - name: MCPHUB_AUTO_MIGRATE
+              value: "false"
+            - name: MCPHUB_DB_HOST
+              value: {{ .Values.databaseHost | quote }}
+            - name: MCPHUB_DB_PORT
+              value: "3306"
+            - name: MCPHUB_DB_NAME
+              value: "mcphub"
+            - name: MCPHUB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName | quote }}
+                  key: username
+            - name: MCPHUB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName | quote }}
+                  key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{- end }}

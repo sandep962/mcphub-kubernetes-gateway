@@ -26,7 +26,7 @@ def tool_call(name: str, arguments: str = "{}", call_id: str = "call-1") -> dict
 
 
 class GatewayAssistantTests(unittest.IsolatedAsyncioTestCase):
-    async def request_assistant(self, model_responses, *, authorized_servers=None, configured=True, tool_result=None, auth_override=True):
+    async def request_assistant(self, model_responses, *, authorized_servers=None, configured=True, tool_result=None, auth_override=True, client_identity=None):
         env = {
             "MCPHUB_LLM_BASE_URL": "https://llm.example/v1",
             "MCPHUB_LLM_API_KEY": "test-provider-key",
@@ -55,7 +55,10 @@ class GatewayAssistantTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(mcp_endpoint, "call_server_tool", upstream),
             ):
                 async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
-                    response = await client.post("/assistant", json={"messages": [{"role": "user", "content": "Help me"}]})
+                    request_body = {"messages": [{"role": "user", "content": "Help me"}]}
+                    if client_identity is not None:
+                        request_body["identity"] = client_identity
+                    response = await client.post("/assistant", json=request_body)
                 return response, provider, upstream, mcp_audit
         finally:
             main.app.dependency_overrides.clear()
@@ -100,6 +103,39 @@ class GatewayAssistantTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider.await_count, 2)
         success = next(call.kwargs for call in mcp_audit.call_args_list if call.kwargs.get("outcome") == "success")
         self.assertEqual(success["identity"], IDENTITY)
+
+    async def test_chat_call_uses_authenticated_identity_not_client_identity(self):
+        response, _, upstream, mcp_audit = await self.request_assistant(
+            [completion(calls=[tool_call("inventory__list_inventory")]), completion("Inventory is ready.")],
+            client_identity={"identity_id": 999, "role": "admin"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        upstream.assert_awaited_once_with("inventory", "list_inventory", {})
+        audit = next(
+            call.kwargs for call in mcp_audit.call_args_list
+            if call.kwargs.get("event_type") == "tool_call"
+        )
+        self.assertEqual(audit["identity"]["identity_id"], IDENTITY["identity_id"])
+        self.assertNotEqual(audit["identity"]["identity_id"], 999)
+
+    async def test_invalid_model_arguments_are_audited_with_validated_tool_and_duration(self):
+        response, _, _, mcp_audit = await self.request_assistant(
+            [
+                completion(calls=[tool_call("inventory__list_inventory", arguments='["not-an-object"]')]),
+                completion("The request arguments were invalid."),
+            ]
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        audit = next(
+            call.kwargs for call in mcp_audit.call_args_list
+            if call.kwargs.get("error_class") == "invalid_assistant_arguments"
+        )
+        self.assertEqual(audit["identity"], IDENTITY)
+        self.assertEqual(audit["server_name"], "inventory")
+        self.assertEqual(audit["tool_name"], "list_inventory")
+        self.assertEqual(audit["outcome"], "denied")
+        self.assertGreaterEqual(audit["duration_ms"], 0)
+        self.assertNotIn("not-an-object", repr(audit))
 
     async def test_agent_supports_multiple_rounds_across_upstream_servers(self):
         response, provider, upstream, _ = await self.request_assistant([

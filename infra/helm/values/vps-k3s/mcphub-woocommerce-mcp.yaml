@@ -1,0 +1,9 @@
+# Replace the image and canonical store URL before deployment.
+namespace: mcphub
+replicas: 2
+image: "REPLACE_WITH_REGISTRY/mcphub-woocommerce-mcp:REPLACE_WITH_IMMUTABLE_TAG"
+imagePullPolicy: IfNotPresent
+imagePullSecrets:
+  - name: mcphub-registry-pull
+servicePort: 8001
+woocommerceCanonicalUrl: "https://REPLACE_WITH_STORE_FQDN"

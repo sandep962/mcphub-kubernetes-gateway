@@ -1,0 +1,26 @@
+# Replace the ingress class, hostnames, and TLS Secret name after the VPS is selected.
+namespace: mcphub
+ingressClassName: REPLACE_WITH_EXISTING_INGRESS_CLASS
+routes:
+  - name: storefront
+    host: REPLACE_WITH_STORE_FQDN
+    path: /
+    serviceName: mcphub-wordpress
+    servicePort: 80
+    tlsSecretName: mcphub-public-tls
+  - name: dashboard
+    host: REPLACE_WITH_DASHBOARD_FQDN
+    path: /
+    serviceName: mcphub-dashboard
+    servicePort: 8080
+    tlsSecretName: mcphub-public-tls
+  - name: gateway
+    host: REPLACE_WITH_MCP_FQDN
+    path: /
+    serviceName: mcphub-gateway
+    servicePort: 8000
+    tlsSecretName: mcphub-public-tls
+localCatchAll:
+  enabled: false
+  serviceName: mcphub-wordpress
+  servicePort: 80

@@ -1,0 +1,16 @@
+namespace: mcphub
+replicas: 2
+image: docker.io/library/mcphub-woocommerce-mcp:demo
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+servicePort: 8001
+# Public canonical HTTPS URL for the Azure demo. Keep this aligned with WordPress home/siteurl
+# and the mcphub-woocommerce-api/base-url Secret so WooCommerce uses HTTPS Basic Auth.
+woocommerceCanonicalUrl: https://sandeep-mcp-demo.duckdns.org
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

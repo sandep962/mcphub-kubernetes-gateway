@@ -1,6 +1,6 @@
 # MCPHub
 
-MCPHub is a local Kubernetes project that places a FastAPI gateway in front of custom MCP servers. WooCommerce, Inventory, and Support are the working upstream integrations. The development cluster is Kind; the VPS/K3s deployment path is documented but not live-verified.
+MCPHub is a Kubernetes-hosted MCP gateway with custom WooCommerce, Inventory, and Support upstreams. The current demo is running on Azure k3s in namespace `mcphub`; local Kind configuration is also retained. The Azure demo is reachable at `https://sandeep-mcp-demo.duckdns.org` with a cert-manager-managed TLS certificate and HTTP-to-HTTPS redirect. Use synthetic demo data only; the public demo is not a production service.
 
 ## Current implementation
 
@@ -14,7 +14,7 @@ MCPHub is a local Kubernetes project that places a FastAPI gateway in front of c
 - **Store:** WordPress with WooCommerce and MariaDB, using persistent volume claims and Kubernetes Secrets for database environment variables.
 - **Deployment:** Helm charts cover the store, metadata setup, gateway, dashboard, and all three upstream MCP services. App Services are ClusterIP. NetworkPolicies limit MCP ingress to gateway pods and app egress to required services.
 
-The gateway, dashboard, and Inventory/Support servers require the metadata database and `mcphub-metadata-secret`; `/health` stays available to probes while application endpoints require `X-API-Key`. See [docs/security-operations.md](docs/security-operations.md) for the private setup, bootstrap, rotation, verification, and demo steps. K3s deployment instructions are preparation only; this checkout has not been deployed to K3s.
+The gateway, dashboard, and Inventory/Support servers require the metadata database and `mcphub-metadata-secret`; `/health` stays available to probes while application endpoints require `X-API-Key`. See [docs/security-operations.md](docs/security-operations.md) for private setup, bootstrap, rotation, verification, and demo steps. Azure k3s deployment is live-verified for the current demo; the instructions later in this README remain general deployment guidance and must be checked against current Helm releases before reuse.
 
 ## Architecture, threat model, and tradeoffs
 
@@ -22,7 +22,7 @@ Clients connect to the authenticated gateway. The gateway discovers and calls th
 
 The gateway stores only SHA-256 API-key hashes and a short display prefix. It authenticates every request, applies identity/team grants and role restrictions to each tool call, and records identity, tool, outcome, and duration without logging API keys, tool arguments, or tool results. Upstream credentials and the LLM key are supplied to server containers using Kubernetes Secret references; they are not sent to the browser. NetworkPolicies restrict MCP ingress to the gateway and limit application egress. Policy behavior depends on a policy-capable CNI and was checked in the current Kind cluster.
 
-The local threat boundary assumes the developer controls the Windows host and Kind cluster. A host or Kubernetes administrator can read container environment and Kubernetes Secrets; use Kubernetes RBAC and Secret encryption at rest on a shared VPS. Local access uses plain HTTP through loopback-only port forwards. The Ingress controller exposes the storefront and dashboard only on the developer's machine at `http://storefront.mcphub.test:8081` and `http://dashboard.mcphub.test:8081`; Windows name resolution requires the hosts-file entry documented in [docs/local-ingress.md](docs/local-ingress.md). For a remote installation, terminate TLS at a controlled reverse proxy/Ingress and expose only the dashboard and gateway. Keep upstream MCP Services internal. MariaDB and WordPress data persist on PVCs, but a single-node Kind/local-path disk is not a backup or high-availability strategy.
+The local threat boundary assumes the developer controls the Windows host and Kind cluster. A host or Kubernetes administrator can read container environment and Kubernetes Secrets; use Kubernetes RBAC and Secret encryption at rest on a shared cluster. Local access uses plain HTTP through loopback-only port forwards. The Azure demo routes dashboard, gateway, and storefront traffic over HTTPS and redirects HTTP to HTTPS; its TLS certificate is managed by cert-manager. Do not use real customer data or production credentials in the demo. Keep upstream MCP Services internal. MariaDB and WordPress data persist on PVCs, but single-node local-path storage is neither backup nor high availability. See [docs/threat-model.md](docs/threat-model.md) for the trust boundaries and residual risks.
 
 The single gateway centralizes authentication and audit but is also a dependency for every client request. Upstream discovery is performed at request time: an unavailable server loses its tools from discovery while healthy upstreams can remain usable. The local Ingress controller is reached through an explicit `kubectl port-forward` tunnel because this Kind cluster does not publish application ports; the tunnel must be running for the named storefront and dashboard URLs. See [docs/local-ingress.md](docs/local-ingress.md) for setup and verification.
 
@@ -36,9 +36,26 @@ Configure an MCP Inspector or other Streamable HTTP client with:
 
 Use a key issued for that client identity and store it in the client's protected credential store. Do not connect clients directly to `mcphub-woocommerce-mcp`, `mcphub-inventory-mcp`, or `mcphub-support-mcp`; the gateway must enforce authorization and audit logging.
 
+## Chat agent and storefront ordering
+
+The dashboard Chat Playground uses the server-configured Gemini provider and offers only tools authorized for the signed-in identity. See [docs/chat-agent.md](docs/chat-agent.md) for provider setup, request flow, and troubleshooting. A tool call that creates a WooCommerce product is a persistent store mutation; check the catalog for duplicates before requesting it.
+
+For the demo storefront, add the selected test product to the cart, enter synthetic test details, select the available shipping method, and choose Cash on Delivery. COD avoids an online charge but still creates a persistent WooCommerce order. The currently verified sample is product #40 and COD order #41; do not submit another checkout for that product merely to repeat a test. See [docs/demo-recording-script.md](docs/demo-recording-script.md) for the current two-user workflow and privacy checklist.
+
 ## VPS/K3s deployment boundary
 
-The Helm charts can be applied to a VPS running K3s using the chart values and secret workflow below. For a fresh K3s store, set the store chart's `storageClassName` to the cluster's `local-path` StorageClass, provide private values only through a protected local file, and create external Secrets through the documented secret workflow. Set image references to a registry reachable by the cluster. The current charts keep all app Services as ClusterIP and do not install an Ingress controller or TLS certificates; configure a controlled TLS ingress/reverse proxy in the target cluster before remote use. This repository's K3s/VPS path is documented but has not been deployed or live-verified.
+The Azure k3s demo has been configured with HTTPS routing for the dashboard, gateway, and storefront. The current host is `sandeep-mcp-demo.duckdns.org`; certificate readiness and endpoint health were checked on 2026-10-24. Recheck live status before recording because deployments and certificates can change. The broader guide is for a new VPS, not an instruction to alter the existing demo; see [docs/vps-k3s-deployment.md](docs/vps-k3s-deployment.md) and [docs/helm-upgrades-rollback.md](docs/helm-upgrades-rollback.md).
+
+For the Azure demo, use `https://sandeep-mcp-demo.duckdns.org/dashboard` and `https://sandeep-mcp-demo.duckdns.org/mcp`. Never enter an API key over HTTP. An SSH tunnel remains an optional alternative for dashboard access; the following tunnel maps dashboard/gateway service addresses locally:
+
+```powershell
+ssh -i D:\DOWNLOAD\urumi-demo-vm_key.pem -N `
+  -L 18080:10.43.17.148:8080 `
+  -L 18000:10.43.207.184:8000 `
+  azureuser@172.198.62.38
+```
+
+Use the storefront only with synthetic demo details. Keep upstream MCP Services and MariaDB private; the public Ingress exposes only the selected application routes.
 
 ## Assignment demonstration
 
@@ -103,8 +120,7 @@ Stop only forwards started by the helper with `.\scripts\stop-local-ports.ps1`. 
 
    ```powershell
    Invoke-RestMethod http://127.0.0.1:8010/health
-   try { Invoke-RestMethod http://127.0.0.1:8010/tools } catch { $_.Exception.Response.StatusCode }
-   Invoke-RestMethod http://127.0.0.1:8010/health
+   Invoke-RestMethod http://127.0.0.1:8010/ready
    $keyLines = @(Get-Content .\.secrets\admin-api-key.txt | Where-Object { $_.Trim() })
    if ($keyLines.Count -ne 1) { throw 'Expected exactly one API key in the file.' }
    $apiKey = $keyLines[0].Trim()
@@ -122,9 +138,11 @@ python scripts/test_woocommerce_mcp.py
 
 Do not use `--create-product` or `--test-order-status` during routine validation; those options change store data.
 
-## Build and deploy to local K3s
+## Fresh K3s installation notes
 
-K3s includes a `local-path` StorageClass. The store chart’s default `standard` class is for the current Kind setup; override it to `local-path` for a **new K3s installation**. The store PVC and MariaDB claim template are persistent. Local-path volumes live on a node and bind workloads to that node; they suit a single-node local development cluster, not resilient multi-node storage. Kubernetes does not permit changing the StorageClass of existing claims in place. Do not apply the new-class setting to existing data claims; back up and plan a data migration before moving existing data between clusters.
+The following sequence is for a **new, empty K3s installation only**. It is not the runbook for the existing Azure demo and must not be applied to its persistent releases/data without a reviewed change plan. For the deployed Azure demo, use [docs/helm-upgrades-rollback.md](docs/helm-upgrades-rollback.md) and inspect current Helm values first.
+
+The target cluster must provide a usable StorageClass such as `local-path`. The store chart’s default `standard` class is intended for the current Kind setup; override it for a **new K3s installation** only. The store PVC and MariaDB claim template are persistent. Local-path volumes live on a node and bind workloads to that node; they suit a single-node demo, not resilient multi-node storage. Kubernetes does not permit changing the StorageClass of existing claims in place. Do not apply the new-class setting to existing data claims; back up and plan a data migration before moving existing data between clusters.
 
 1. Select and verify the K3s kubeconfig context. Do not use the Kind context for this deployment:
 
@@ -156,7 +174,7 @@ K3s includes a `local-path` StorageClass. The store chart’s default `standard`
    Remove-Item .\mcphub-images.tar
    ```
 
-3. Create the `mcphub` namespace and deploy the store with the existing private values file. That ignored file must contain `mariadb.password` and `mariadb.rootPassword`; do not display or commit it. The chart-managed Secret is consumed by the WordPress and MariaDB pods:
+3. Create the `mcphub` namespace and create `mcphub-db-secret` through the secure prompt workflow in [docs/security-operations.md](docs/security-operations.md#store-database-secret). The local values file references that pre-created Secret; it must not contain database passwords. The WordPress and MariaDB pods consume Secret references:
 
    ```powershell
    helm upgrade --install mcphub-store .\infra\helm\mcphub-store `
@@ -165,7 +183,7 @@ K3s includes a `local-path` StorageClass. The store chart’s default `standard`
      --set-string storageClassName=local-path
    ```
 
-   This command is for a fresh K3s data store. The chart’s Helm release also stores supplied values; limit Helm release and Secret access with RBAC and enable K3s secrets encryption for sensitive deployments.
+   This command is for a fresh K3s data store. Helm stores supplied release values, which is why database passwords are supplied through the Kubernetes Secret rather than Helm values. Limit Helm release and Secret access with RBAC and enable K3s Secrets encryption for sensitive deployments.
 
 4. Create the `mcphub-woocommerce-api` Kubernetes Secret using the masked, temporary-file workflow in [docs/woocommerce-mcp.md](docs/woocommerce-mcp.md). Its `base-url` must target WordPress over the internal Service (`http://mcphub-wordpress`). Do not put consumer credentials in Helm values, command arguments, URLs, or logs.
 
@@ -194,7 +212,7 @@ K3s includes a `local-path` StorageClass. The store chart’s default `standard`
 
    In another window, repeat the health, `/tools`, `list_products`, and `get_order(16)` calls from the local verification section. These are read-only. Confirm two MCP pods are ready and use the same deployment image/configuration. Never run `kubectl get secret -o yaml` when sharing terminal output.
 
-The K3s workflow has not been run from this checkout. For a new K3s cluster, include Inventory, Support, metadata provisioning, and secret bootstrap using [docs/security-operations.md](docs/security-operations.md); verify cluster context, image import, storage class, and data backup first. Never install the store chart over existing data without a planned migration. The Kubernetes Secret encryption and RBAC settings are cluster operations and are not configured by these Helm charts.
+The Azure K3s demo has been deployed and live-checked, but this section describes a **new, empty K3s installation**, not the procedure used for or safe to apply to the existing Azure releases. Verify the target context and storage class before changes. For a fresh installation, set the store chart storage class to `local-path`; never apply that setting to existing Kind claims or reuse WordPress PVCs across clusters. Build all required images from a reviewed source revision and import them into every eligible containerd node or publish them to a registry reachable by all nodes. Create `mcphub-db-secret` through the protected workflow in [docs/security-operations.md](docs/security-operations.md#store-database-secret), deploy store/MariaDB first, create the independent metadata Secret, then follow the metadata/app chart sequence. Use K3s Secret encryption and narrowly scoped RBAC, and expose authenticated interfaces only behind TLS. Do not switch Kubernetes contexts as part of the Kind workflow.
 
 ## WooCommerce OAuth URL handling
 

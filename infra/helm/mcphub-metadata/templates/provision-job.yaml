@@ -15,10 +15,14 @@ spec:
     spec:
       restartPolicy: OnFailure
       automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: provisioner
           image: {{ .Values.provisionerImage | quote }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
           command: ["python", "-m", "apps.shared.provision_database"]
           env:
             - name: MARIADB_HOST

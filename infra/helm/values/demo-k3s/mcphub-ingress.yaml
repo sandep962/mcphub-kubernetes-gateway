@@ -1,0 +1,8 @@
+# No Ingress resources are enabled for the initial SSH-tunnel-only setup.
+namespace: mcphub
+ingressClassName: traefik
+routes: []
+localCatchAll:
+  enabled: false
+  serviceName: mcphub-wordpress
+  servicePort: 80

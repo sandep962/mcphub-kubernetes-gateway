@@ -1,0 +1,17 @@
+# Replace the image before deployment.
+namespace: mcphub
+replicas: 2
+image: "REPLACE_WITH_REGISTRY/mcphub-inventory-mcp:REPLACE_WITH_IMMUTABLE_TAG"
+imagePullPolicy: IfNotPresent
+imagePullSecrets:
+  - name: mcphub-registry-pull
+servicePort: 8002
+database:
+  autoMigrate: false
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

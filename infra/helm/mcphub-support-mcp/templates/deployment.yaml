@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mcphub-support-mcp
+  namespace: {{ .Values.namespace }}
   labels:
     app: mcphub-support-mcp
 spec:
@@ -14,6 +15,10 @@ spec:
       labels:
         app: mcphub-support-mcp
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: support-mcp
           image: {{ .Values.image | quote }}
@@ -23,6 +28,8 @@ spec:
               containerPort: 8003
               protocol: TCP
           env:
+            - name: MCPHUB_AUTO_MIGRATE
+              value: {{ .Values.database.autoMigrate | quote }}
             - name: MCPHUB_DB_HOST
               value: mcphub-mariadb.mcphub.svc.cluster.local
             - name: MCPHUB_DB_PORT

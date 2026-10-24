@@ -3,6 +3,9 @@ namespace: mcphub
 
 image: mcphub-support-mcp:persistent-v2
 imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+database:
+  autoMigrate: true
 
 service:
   type: ClusterIP

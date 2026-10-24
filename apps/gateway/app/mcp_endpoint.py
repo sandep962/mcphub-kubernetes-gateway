@@ -9,12 +9,18 @@ from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import unquote
 
+from fastapi import HTTPException
 from mcp import types
 from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
-from apps.gateway.app.services.mcp_client import call_server_tool, list_all_tools
+from apps.gateway.app.services.mcp_client import (
+    UpstreamToolCallTimeout,
+    call_server_tool,
+    list_all_tools,
+)
 from apps.shared import database
+from apps.gateway.app import oauth
 
 
 _current_identity: contextvars.ContextVar[dict[str, Any] | None] = (
@@ -116,6 +122,10 @@ async def _call_tool(name: str, arguments: dict[str, Any] | None) -> types.CallT
     server_name, tool_name = parsed
     started = time.perf_counter()
     try:
+        if identity.get("auth_method") == "oauth" and "mcp:tools" not in identity.get("oauth_scopes", []):
+            database.record_audit(event_type="tool_call", outcome="denied", error_class="insufficient_scope",
+                                  identity=identity, server_name=server_name, tool_name=tool_name, duration_ms=0)
+            return _text_result("Permission denied for this MCP tool.")
         discovered = await list_all_tools()
         exists = any(
             item["server"] == server_name and item["name"] == tool_name
@@ -171,6 +181,21 @@ async def _call_tool(name: str, arguments: dict[str, Any] | None) -> types.CallT
         )
     except database.StorageUnavailable:
         return _text_result("Authorization or audit storage is unavailable.")
+    except UpstreamToolCallTimeout:
+        elapsed_ms = max(0, round((time.perf_counter() - started) * 1000))
+        try:
+            database.record_audit(
+                event_type="tool_call",
+                outcome="failure",
+                error_class="upstream_tool_timeout",
+                identity=identity,
+                server_name=server_name,
+                tool_name=tool_name,
+                duration_ms=elapsed_ms,
+            )
+        except database.StorageUnavailable:
+            pass
+        return _text_result("The upstream MCP tool call timed out.")
     except Exception as exc:
         elapsed_ms = max(0, round((time.perf_counter() - started) * 1000))
         try:
@@ -199,7 +224,7 @@ async def call_tool_as_identity(
         _current_identity.reset(token)
 
 
-async def _send_json(send, status: int, detail: str) -> None:
+async def _send_json(send, status: int, detail: str, extra_headers: list[tuple[bytes, bytes]] | None = None) -> None:
     body = json.dumps({"detail": detail}).encode("utf-8")
     await send(
         {
@@ -209,7 +234,7 @@ async def _send_json(send, status: int, detail: str) -> None:
                 (b"content-type", b"application/json"),
                 (b"content-length", str(len(body)).encode("ascii")),
                 (b"cache-control", b"no-store"),
-            ],
+            ] + (extra_headers or []),
         }
     )
     await send({"type": "http.response.body", "body": body})
@@ -226,30 +251,76 @@ class AuthenticatedMCPApp:
         headers = {key.lower(): value for key, value in scope.get("headers", [])}
         raw_key = headers.get(b"x-api-key", b"")
         api_key = raw_key.decode("utf-8", errors="ignore").strip()
+        authorization = headers.get(b"authorization", b"").decode("latin-1", errors="ignore").strip()
+        if api_key and authorization:
+            try:
+                database.record_audit(event_type="authentication", outcome="denied", error_class="ambiguous_credential")
+            except database.StorageUnavailable:
+                await _send_json(send, 503, "Authentication storage is unavailable.")
+                return
+            await _send_json(send, 400, "Send either an API key or a bearer token, not both.")
+            return
 
-        if not api_key:
+        identity = None
+        auth_method = ""
+        if api_key:
+            auth_method = "api_key"
+            try:
+                identity = database.verify_api_key(api_key)
+            except database.StorageUnavailable:
+                await _send_json(send, 503, "Authentication storage is unavailable.")
+                return
+        elif authorization.lower().startswith("bearer "):
+            auth_method = "oauth"
+            token_value = authorization[7:].strip()
+            if token_value:
+                try:
+                    identity = await oauth.authenticate_bearer(token_value)
+                except HTTPException as exc:
+                    if exc.status_code == 503:
+                        await _send_json(send, 503, exc.detail)
+                        return
+                    if exc.status_code == 403:
+                        try:
+                            _, resource = oauth.oauth_urls()
+                            challenge = ('Bearer error="insufficient_scope", scope="mcp:tools", '
+                                         f'resource_metadata="{oauth._resource_metadata_url(resource)}"')
+                        except HTTPException:
+                            challenge = 'Bearer error="insufficient_scope"'
+                        await _send_json(send, 403, "The access token lacks the required MCP scope.",
+                                         [(b"www-authenticate", challenge.encode("ascii"))])
+                        return
+                    identity = None
+                except database.StorageUnavailable:
+                    await _send_json(send, 503, "Authentication storage is unavailable.")
+                    return
+        elif authorization:
+            auth_method = "unsupported"
+
+        if not identity:
             try:
                 database.record_audit(
                     event_type="authentication",
                     outcome="denied",
-                    error_class="missing_key",
+                    error_class="missing_credential" if not api_key and not authorization else "invalid_credential",
                 )
             except database.StorageUnavailable:
                 await _send_json(send, 503, "Authentication storage is unavailable.")
                 return
-            await _send_json(send, 401, "A valid X-API-Key header is required.")
+            challenge: list[tuple[bytes, bytes]] = []
+            if auth_method != "api_key":
+                try:
+                    _, resource = oauth.oauth_urls()
+                    value = f'Bearer resource_metadata="{oauth._resource_metadata_url(resource)}", scope="mcp:tools"'
+                    if auth_method == "oauth":
+                        value = f'Bearer error="invalid_token", resource_metadata="{oauth._resource_metadata_url(resource)}", scope="mcp:tools"'
+                    challenge = [(b"www-authenticate", value.encode("ascii"))]
+                except HTTPException:
+                    pass
+            await _send_json(send, 401, "A valid MCPHub API key or OAuth bearer token is required.", challenge)
             return
-
         try:
-            identity = database.verify_api_key(api_key)
-            if identity is None:
-                database.record_audit(
-                    event_type="authentication",
-                    outcome="denied",
-                    error_class="invalid_key",
-                )
-                await _send_json(send, 401, "A valid X-API-Key header is required.")
-                return
+            identity["auth_method"] = identity.get("auth_method") or auth_method
             database.record_audit(
                 event_type="authentication",
                 outcome="success",

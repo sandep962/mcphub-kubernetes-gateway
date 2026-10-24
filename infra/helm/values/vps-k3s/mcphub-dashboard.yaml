@@ -1,0 +1,8 @@
+# Replace the image before deployment.
+namespace: mcphub
+replicas: 2
+image: "REPLACE_WITH_REGISTRY/mcphub-dashboard:REPLACE_WITH_IMMUTABLE_TAG"
+imagePullPolicy: IfNotPresent
+imagePullSecrets:
+  - name: mcphub-registry-pull
+servicePort: 8080

@@ -14,9 +14,14 @@ spec:
       labels:
         app: mcphub-mariadb
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: mariadb
-          image: {{ .Values.mariadb.image }}
+          image: {{ .Values.mariadb.image | quote }}
+          imagePullPolicy: {{ .Values.mariadb.imagePullPolicy | quote }}
           ports:
             - name: mysql
               containerPort: 3306
@@ -24,22 +29,22 @@ spec:
             - name: MARIADB_DATABASE
               valueFrom:
                 secretKeyRef:
-                  name: mcphub-db-secret
+                  name: {{ .Values.mariadb.existingSecret | default "mcphub-db-secret" | quote }}
                   key: database
             - name: MARIADB_USER
               valueFrom:
                 secretKeyRef:
-                  name: mcphub-db-secret
+                  name: {{ .Values.mariadb.existingSecret | default "mcphub-db-secret" | quote }}
                   key: username
             - name: MARIADB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mcphub-db-secret
+                  name: {{ .Values.mariadb.existingSecret | default "mcphub-db-secret" | quote }}
                   key: password
             - name: MARIADB_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mcphub-db-secret
+                  name: {{ .Values.mariadb.existingSecret | default "mcphub-db-secret" | quote }}
                   key: root-password
           volumeMounts:
             - name: data

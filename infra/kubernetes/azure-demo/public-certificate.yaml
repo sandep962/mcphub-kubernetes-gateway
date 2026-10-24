@@ -1,0 +1,14 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mcphub-public-tls
+  namespace: mcphub
+spec:
+  secretName: mcphub-public-tls
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  dnsNames:
+    - sandeep-mcp-demo.duckdns.org
+  duration: 2160h
+  renewBefore: 360h

@@ -1,6 +1,8 @@
 namespace: mcphub
 replicas: 2
 image: mcphub-woocommerce-mcp:local
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
 servicePort: 8001
 woocommerceCanonicalUrl: http://localhost:8081
 resources:

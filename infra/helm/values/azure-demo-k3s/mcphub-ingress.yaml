@@ -1,0 +1,36 @@
+namespace: mcphub
+ingressClassName: traefik
+routes:
+  - name: storefront
+    host: sandeep-mcp-demo.duckdns.org
+    path: /
+    pathType: Prefix
+    serviceName: mcphub-wordpress
+    servicePort: 80
+    tlsSecretName: mcphub-public-tls
+  - name: dashboard
+    host: sandeep-mcp-demo.duckdns.org
+    path: /dashboard
+    pathType: Prefix
+    serviceName: mcphub-dashboard
+    servicePort: 8080
+    tlsSecretName: mcphub-public-tls
+  - name: gateway-mcp
+    host: sandeep-mcp-demo.duckdns.org
+    path: /mcp
+    pathType: Prefix
+    serviceName: mcphub-gateway
+    servicePort: 8000
+    tlsSecretName: mcphub-public-tls
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: mcphub-mcphub-mcp-canonical@kubernetescrd
+middlewares:
+  - name: mcphub-mcp-canonical
+    spec:
+      replacePathRegex:
+        regex: '^/mcp$'
+        replacement: /mcp/
+localCatchAll:
+  enabled: false
+  serviceName: mcphub-wordpress
+  servicePort: 80

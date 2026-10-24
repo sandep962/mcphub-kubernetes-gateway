@@ -24,6 +24,39 @@ $metadataPassword = $null; $payload = $null; $bytes = $null; $rng.Dispose()
 
 The command output reports only the Secret resource name/status. For a new cluster, deploy MariaDB and WordPress first, then run the metadata provisioning Job. The Job is idempotent and grants only the privileges needed for schema creation and CRUD; it does not modify the WordPress database.
 
+## Store database Secret
+
+For a **fresh** store install, create the database Secret before installing the store chart. The ignored `infra/helm/mcphub-store/values-local.yaml` should contain only `mariadb.existingSecret: mcphub-db-secret`; do not put password values in Helm values because Helm stores release configuration. Prompt for both passwords as secure input and send the Secret manifest directly to `kubectl` stdin:
+
+```powershell
+kubectl create namespace mcphub --dry-run=client -o yaml | kubectl apply -f -
+$rootSecure = Read-Host 'MariaDB root password' -AsSecureString
+$appSecure = Read-Host 'WordPress database password' -AsSecureString
+$rootPtr = [IntPtr]::Zero
+$appPtr = [IntPtr]::Zero
+try {
+  $rootPtr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($rootSecure)
+  $appPtr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($appSecure)
+  $rootPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($rootPtr)
+  $appPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($appPtr)
+  $manifest = [ordered]@{
+    apiVersion = 'v1'; kind = 'Secret'
+    metadata = @{ name = 'mcphub-db-secret'; namespace = 'mcphub' }
+    type = 'Opaque'
+    stringData = @{ database = 'wordpress'; username = 'wpuser'; password = $appPlain; 'root-password' = $rootPlain }
+  } | ConvertTo-Json -Depth 5 -Compress
+  $manifest | kubectl apply -f - | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'Secret apply failed; inspect the sanitized kubectl error.' }
+}
+finally {
+  if ($rootPtr -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($rootPtr) }
+  if ($appPtr -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($appPtr) }
+  $rootSecure = $null; $appSecure = $null; $rootPlain = $null; $appPlain = $null; $manifest = $null
+}
+```
+
+This creates or updates only the named Secret and does not print its values. Use unique strong credentials and a protected administrative terminal. Do not use this procedure to rotate credentials for an existing database without a coordinated account/Secret maintenance plan. The store chart supports `mariadb.existingSecret`; its Secret template is skipped when that value is set.
+
 ## Build and deploy to the existing Kind cluster
 
 Confirm `kubectl config current-context` is the intended Kind context and that the existing MariaDB pod and PVC are healthy. Do not delete or recreate the cluster, store release, PVCs, or database pods for this update.
@@ -106,6 +139,8 @@ Set-Location C:\MCPHub
 .\.venv\Scripts\python.exe -m pytest -q
 Push-Location .\apps\dashboard; npm run lint; npm run build; Pop-Location
 helm lint .\infra\helm\mcphub-gateway
+helm lint .\infra\helm\mcphub-dashboard
+helm lint .\infra\helm\mcphub-ingress
 helm lint .\infra\helm\mcphub-inventory-mcp
 helm lint .\infra\helm\mcphub-support-mcp
 helm lint .\infra\helm\mcphub-dashboard
@@ -116,7 +151,7 @@ If `/tools` returns 401, provide `X-API-Key`; if it returns 503, check `/ready`,
 
 ## K3s preparation
 
-The K3s path has not been exercised here. Verify the target context and storage class before any changes. For a **fresh** K3s installation, set the store chart storage class to `local-path`; never apply that setting to existing Kind claims or reuse WordPress PVCs across clusters. Build all five images above and import them into every eligible containerd node or publish them to a private registry. Create `mcphub-db-secret` for the fresh store through a protected workflow, deploy store/MariaDB first, create the independent metadata Secret, then follow the metadata/app chart sequence. Use K3s secret encryption and narrowly scoped RBAC, and expose the dashboard only behind TLS. Do not switch Kubernetes contexts as part of the Kind workflow.
+The Azure K3s demo has been deployed and live-checked, including HTTPS routes with cert-manager-managed TLS and an HTTP-to-HTTPS redirect (checked 2026-10-24). The instructions here apply only to a **fresh** K3s installation: verify the target context and storage class; use `local-path` only for new claims; build reviewed images and import them to each eligible node or publish them to a registry; create `mcphub-db-secret` using the secure prompt workflow above; deploy store/MariaDB first; create the separate metadata Secret; then follow the metadata/app chart sequence. Use K3s Secret encryption and narrowly scoped RBAC, and expose authenticated interfaces only behind TLS. Do not switch Kubernetes contexts as part of the Kind workflow.
 
 ## Demo recording checklist
 

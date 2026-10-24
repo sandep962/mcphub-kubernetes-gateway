@@ -1,0 +1,17 @@
+namespace: mcphub
+databaseHost: mcphub-mariadb.mcphub.svc.cluster.local
+provisionerImage: docker.io/library/mcphub-gateway:demo
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+secretName: mcphub-metadata-secret
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+schemaMigration:
+  # Keep disabled until the schema-v5 impact has explicit approval.
+  enabled: false
+  version: 5

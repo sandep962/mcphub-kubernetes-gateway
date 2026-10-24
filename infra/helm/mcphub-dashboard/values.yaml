@@ -2,4 +2,6 @@ namespace: mcphub
 replicas: 2
 image: mcphub-dashboard:chat-agent-v1
 servicePort: 8080
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
 

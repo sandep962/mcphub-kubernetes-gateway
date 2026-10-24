@@ -2,6 +2,7 @@
 storageClassName: standard
 wordpress:
   image: mcphub-wordpress:local
+  imagePullPolicy: IfNotPresent
   replicas: 1
   servicePort: 80
   storage: 2Gi
@@ -14,6 +15,8 @@ wordpress:
       memory: 512Mi
 mariadb:
   image: mariadb:11.4
+  imagePullPolicy: IfNotPresent
+  existingSecret: ""
   storage: 2Gi
   resources:
     requests:
@@ -22,4 +25,5 @@ mariadb:
     limits:
       cpu: 500m
       memory: 512Mi
+imagePullSecrets: []
 

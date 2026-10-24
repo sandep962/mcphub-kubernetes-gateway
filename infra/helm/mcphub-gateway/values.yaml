@@ -1,10 +1,22 @@
 namespace: mcphub
 replicas: 2
 image: mcphub-gateway:chat-agent-v2
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
 servicePort: 8000
+upstreamToolCallTimeoutSeconds: 30
+database:
+  # Keep current behavior for existing/local installs. Production values disable
+  # this and use the explicit mcphub-metadata schema migration Job.
+  autoMigrate: true
 woocommerceMcpUrl: http://mcphub-woocommerce-mcp.mcphub.svc.cluster.local:8001/mcp
 inventoryMcpUrl: http://mcphub-inventory-mcp.mcphub.svc.cluster.local:8002/mcp
 supportMcpUrl: http://mcphub-support-mcp.mcphub.svc.cluster.local:8003/mcp
+
+# OAuth stays disabled until a real HTTPS issuer and public MCP resource URL are set.
+oauth:
+  issuerUrl: ""
+  resourceUrl: ""
 
 # OpenAI-compatible Chat Completions provider settings for the dashboard assistant.
 llm:

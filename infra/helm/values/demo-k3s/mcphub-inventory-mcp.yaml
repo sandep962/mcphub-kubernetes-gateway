@@ -1,0 +1,15 @@
+namespace: mcphub
+replicas: 2
+image: docker.io/library/mcphub-inventory-mcp:demo
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+servicePort: 8002
+database:
+  autoMigrate: false
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

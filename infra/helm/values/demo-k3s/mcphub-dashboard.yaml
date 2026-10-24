@@ -1,0 +1,6 @@
+namespace: mcphub
+replicas: 2
+image: docker.io/library/mcphub-dashboard:demo
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+servicePort: 8080

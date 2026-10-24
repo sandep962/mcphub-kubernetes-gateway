@@ -5,12 +5,18 @@ import time
 from typing import Any, Literal
 from contextlib import asynccontextmanager
 from apps.gateway.app import mcp_endpoint
+from apps.gateway.app import oauth
 from apps.gateway.app.mcp_endpoint import mcp_http_app, mcp_lifespan
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from apps.gateway.app.services.mcp_client import call_server_tool, list_all_tools
+from apps.gateway.app.services.mcp_client import (
+    UpstreamToolCallTimeout,
+    call_server_tool,
+    list_all_tools,
+    list_upstream_statuses,
+)
 from apps.shared import database
 
 
@@ -27,6 +33,7 @@ app = FastAPI(
     lifespan=app_lifespan,
 )
 app.mount("/mcp", mcp_http_app)
+app.include_router(oauth.router)
 
 
 class ToolCallRequest(BaseModel):
@@ -140,7 +147,7 @@ class IdentityCreate(BaseModel):
 
 class KeyCreate(BaseModel):
     identity_id: int = Field(gt=0)
-    api_key: str = Field(min_length=32, max_length=256)
+    api_key: str | None = Field(default=None, min_length=32, max_length=256)
 
 
 class PermissionCreate(BaseModel):
@@ -221,6 +228,17 @@ async def list_tools(identity: dict[str, Any] = Depends(require_identity)):
         raise HTTPException(status_code=502, detail="Unable to discover tools from configured MCP servers.") from None
 
 
+@app.get("/upstreams/status", tags=["MCP"])
+async def upstream_statuses(_: dict[str, Any] = Depends(require_identity)):
+    """Report health without exposing configured endpoint URLs."""
+    try:
+        return await list_upstream_statuses()
+    except database.StorageUnavailable:
+        raise HTTPException(status_code=503, detail="Upstream status storage is unavailable.") from None
+    except Exception:
+        raise HTTPException(status_code=502, detail="Unable to check upstream status.") from None
+
+
 @app.get("/whoami", tags=["Authentication"])
 async def whoami(identity: dict[str, Any] = Depends(require_identity)):
     return {
@@ -273,6 +291,18 @@ async def call_tool(request: ToolCallRequest, identity: dict[str, Any] = Depends
         raise
     except database.StorageUnavailable:
         raise HTTPException(status_code=503, detail="Authorization or audit storage is unavailable.") from None
+    except UpstreamToolCallTimeout:
+        try:
+            database.record_audit(
+                event_type="tool_call", outcome="failure", error_class="upstream_tool_timeout",
+                identity=identity, server_name=server_name, tool_name=request.tool,
+                duration_ms=max(0, int((time.monotonic() - started_at) * 1000)),
+            )
+        except database.StorageUnavailable:
+            pass
+        raise HTTPException(
+            status_code=504, detail="The upstream MCP tool call timed out."
+        ) from None
     except Exception as exc:
         try:
             database.record_audit(
@@ -359,6 +389,14 @@ async def chat_assistant(
             function_name = function.get("name", "")
             if not isinstance(function_name, str) or not function_name or len(function_name) > 120:
                 raise HTTPException(status_code=502, detail="The configured LLM provider returned an invalid tool name.")
+            tool_started_at = time.monotonic()
+            validated_tool = next(
+                (
+                    tool for tool in authorized
+                    if function_name == f"{tool['server']}__{tool['name']}"
+                ),
+                None,
+            )
             raw_arguments = function.get("arguments", "{}")
             status = "failed"
             if not isinstance(raw_arguments, str) or len(raw_arguments) > 32000:
@@ -377,7 +415,10 @@ async def chat_assistant(
                 reported_calls.append({"name": function_name or "unknown", "outcome": status})
                 database.record_audit(
                     event_type="tool_call", outcome="denied", error_class="invalid_assistant_arguments",
-                    identity=identity, tool_name=function_name or None,
+                    identity=identity,
+                    server_name=validated_tool["server"] if validated_tool else None,
+                    tool_name=validated_tool["name"] if validated_tool else function_name or None,
+                    duration_ms=max(0, int((time.monotonic() - tool_started_at) * 1000)),
                 )
             else:
                 # Use the gateway MCP router so every attempt is re-authorized and audited as this user.
@@ -500,8 +541,12 @@ async def admin_list_keys(team_id: int | None = None, _: dict[str, Any] = Depend
 @app.post("/admin/keys")
 async def admin_create_key(body: KeyCreate, _: dict[str, Any] = Depends(require_admin)):
     try:
-        # The client supplies a high-entropy key and receives only its safe metadata back.
-        return database.create_api_key(body.identity_id, body.api_key)
+        # New clients get a server-generated secret once; legacy clients may still supply one.
+        api_key = body.api_key or database.generate_api_key()
+        metadata = database.create_api_key(body.identity_id, api_key)
+        if body.api_key is None:
+            return {**metadata, "api_key": api_key}
+        return metadata
     except Exception as exc:
         raise _admin_error(exc) from None
 
@@ -547,3 +592,16 @@ async def admin_audit(
     _: dict[str, Any] = Depends(require_admin),
 ):
     return database.list_audit_events(limit, offset)
+
+
+@app.get("/admin/observability/tool-calls")
+async def admin_tool_call_metrics(
+    hours: int = Query(default=24, ge=1, le=168),
+    _: dict[str, Any] = Depends(require_admin),
+):
+    try:
+        return database.tool_call_metrics(hours)
+    except database.StorageUnavailable:
+        raise HTTPException(status_code=503, detail="Observability storage is unavailable.") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="Tool-call metrics are unavailable.") from None

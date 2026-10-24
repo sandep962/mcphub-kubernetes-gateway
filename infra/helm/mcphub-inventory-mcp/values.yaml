@@ -1,7 +1,11 @@
 namespace: mcphub
 replicas: 2
 image: mcphub-inventory-mcp:persistent-v2
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
 servicePort: 8002
+database:
+  autoMigrate: true
 resources:
   requests:
     cpu: 100m

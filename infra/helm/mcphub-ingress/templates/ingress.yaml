@@ -1,21 +1,32 @@
 {{- range .Values.routes }}
+{{- $route := . }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mcphub-{{ .name }}
   namespace: {{ $.Values.namespace }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   ingressClassName: {{ $.Values.ingressClassName | quote }}
   rules:
     - host: {{ .host | quote }}
       http:
         paths:
-          - path: /
-            pathType: Prefix
+          - path: {{ .path | default "/" | quote }}
+            pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
                 name: {{ .serviceName | quote }}
                 port:
                   number: {{ .servicePort }}
+  {{- with $route.tlsSecretName }}
+  tls:
+    - hosts:
+        - {{ $route.host | quote }}
+      secretName: {{ . | quote }}
+  {{- end }}
 ---
 {{- end }}

@@ -1,0 +1,19 @@
+# Replace with an approved image containing both DB provisioning and schema migration modules.
+namespace: mcphub
+databaseHost: mcphub-mariadb.mcphub.svc.cluster.local
+provisionerImage: "REPLACE_WITH_APPROVED_REGISTRY_IMAGE_AND_DIGEST"
+imagePullPolicy: IfNotPresent
+imagePullSecrets:
+  - name: mcphub-registry-pull
+secretName: mcphub-metadata-secret
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+schemaMigration:
+  enabled: false
+  version: 5
+  runId: ""

@@ -27,6 +27,29 @@ MCP_SERVERS = {
 }
 
 UPSTREAM_DISCOVERY_TIMEOUT_SECONDS = 8.0
+UPSTREAM_TOOL_CALL_TIMEOUT_SECONDS = float(
+    os.getenv("MCPHUB_UPSTREAM_TOOL_CALL_TIMEOUT_SECONDS", "30")
+)
+_TIMEOUT_EXCEPTION_NAMES = {
+    "TimeoutError", "TimeoutException", "ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout",
+}
+_CONNECTION_EXCEPTION_NAMES = {
+    "ConnectError", "ReadError", "WriteError", "RemoteProtocolError", "ConnectionClosed", "OSError",
+}
+
+
+class UpstreamToolCallTimeout(TimeoutError):
+    """Raised when an upstream MCP tool call exceeds its end-to-end deadline."""
+
+
+def _failure_category(exc: Exception) -> str:
+    """Map transport failures to fixed labels without returning exception details."""
+    exception_name = type(exc).__name__
+    if isinstance(exc, TimeoutError) or exception_name in _TIMEOUT_EXCEPTION_NAMES:
+        return "timeout"
+    if isinstance(exc, OSError) or exception_name in _CONNECTION_EXCEPTION_NAMES:
+        return "connection_error"
+    return "discovery_error"
 
 
 def _enabled_servers() -> dict[str, str]:
@@ -89,6 +112,30 @@ async def list_all_tools() -> list[dict]:
     return tools
 
 
+async def list_upstream_statuses() -> list[dict[str, str]]:
+    """Return sanitized, independently checked status for every registration."""
+    rows = database.list_upstreams()
+
+    async def check(row: dict) -> dict[str, str]:
+        if not row["enabled"]:
+            return {"name": row["name"], "status": "Disabled"}
+
+        try:
+            await asyncio.wait_for(
+                _list_server_tools(row["name"], row["endpoint_url"]),
+                timeout=UPSTREAM_DISCOVERY_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            return {
+                "name": row["name"],
+                "status": "Unreachable",
+                "reason": _failure_category(exc),
+            }
+        return {"name": row["name"], "status": "Connected"}
+
+    return await asyncio.gather(*(check(row) for row in rows))
+
+
 async def call_server_tool(
     server_name: str,
     tool_name: str,
@@ -99,6 +146,22 @@ async def call_server_tool(
     if not server_url:
         raise ValueError(f"Unknown MCP server: {server_name}")
 
+    try:
+        return await asyncio.wait_for(
+            _execute_server_tool(server_url, server_name, tool_name, arguments),
+            timeout=UPSTREAM_TOOL_CALL_TIMEOUT_SECONDS,
+        )
+    except TimeoutError as exc:
+        raise UpstreamToolCallTimeout from exc
+
+
+async def _execute_server_tool(
+    server_url: str,
+    server_name: str,
+    tool_name: str,
+    arguments: dict | None,
+) -> dict:
+    """Include connection setup, initialization, and execution in one deadline."""
     async with streamablehttp_client(server_url) as (
         read_stream,
         write_stream,

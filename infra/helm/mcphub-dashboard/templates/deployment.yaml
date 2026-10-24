@@ -13,10 +13,14 @@ spec:
       labels:
         app: mcphub-dashboard
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: dashboard
           image: {{ .Values.image | quote }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
           ports:
             - name: http
               containerPort: 8080

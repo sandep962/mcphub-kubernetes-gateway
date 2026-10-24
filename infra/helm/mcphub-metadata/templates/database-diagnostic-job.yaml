@@ -1,0 +1,59 @@
+{{- if .Values.databaseDiagnostics.enabled }}
+{{- $runId := toString (.Values.databaseDiagnostics.runId | default "") }}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,20}[a-z0-9])?$" $runId) }}
+{{- fail "databaseDiagnostics.runId is required and must be a lowercase DNS-safe suffix of at most 22 characters" }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mcphub-db-diagnostic-{{ $runId }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: mcphub-db-diagnostic
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 60
+  template:
+    metadata:
+      labels:
+        app: mcphub-db-diagnostic
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: database-diagnostic
+          image: {{ .Values.provisionerImage | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
+          command: ["python", "-m", "apps.shared.diagnose_database"]
+          env:
+            - name: MCPHUB_AUTO_MIGRATE
+              value: "false"
+            - name: MCPHUB_DB_HOST
+              value: {{ .Values.databaseHost | quote }}
+            - name: MCPHUB_DB_PORT
+              value: "3306"
+            - name: MCPHUB_DB_NAME
+              value: "mcphub"
+            - name: MCPHUB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName | quote }}
+                  key: username
+            - name: MCPHUB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName | quote }}
+                  key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{- end }}

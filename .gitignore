@@ -8,6 +8,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+/env/
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -35,5 +36,25 @@ kind-config.local.yaml
 .secrets/
 .local/
 infra/helm/**/values-private.yaml
+infra/helm/**/values-local.yaml
 
-infra/helm/mcphub-store/values-local.yaml
+# Local database exports and container image archives are private recovery/demo artifacts.
+*.tar
+*.tar.gz
+*.oci.tar
+
+# Database exports, host credentials, and cluster access material.
+*.sql
+*.sql.gz
+*.dump
+*.bak
+*.pem
+*.p12
+*.kubeconfig
+*.key
+
+# Local Azure diagnostic output and one-off migration Job manifests.
+AZURE_MIGRATION_FIX.md
+mcphub-*-diagnostic*.yaml
+mcphub-migration-diagnostics.md
+mcphub-schema-migration-*.yaml

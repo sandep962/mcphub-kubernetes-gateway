@@ -13,14 +13,20 @@ spec:
       labels:
         app: mcphub-inventory-mcp
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: server
           image: {{ .Values.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
           ports:
             - name: http
               containerPort: 8002
           env:
+            - name: MCPHUB_AUTO_MIGRATE
+              value: {{ .Values.database.autoMigrate | quote }}
             - name: MCPHUB_DB_HOST
               value: mcphub-mariadb.mcphub.svc.cluster.local
             - name: MCPHUB_DB_PORT

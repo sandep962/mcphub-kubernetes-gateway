@@ -1,0 +1,31 @@
+# Replace every REPLACE_WITH value and review storage sizing before deployment.
+# The Helm release is in default; rendered workloads remain in mcphub.
+namespace: mcphub
+storageClassName: local-path
+imagePullSecrets:
+  - name: mcphub-registry-pull
+wordpress:
+  image: "REPLACE_WITH_REGISTRY/mcphub-wordpress:REPLACE_WITH_IMMUTABLE_TAG"
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  servicePort: 80
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+mariadb:
+  image: "REPLACE_WITH_PINNED_MARIADB_IMAGE_AND_DIGEST"
+  imagePullPolicy: IfNotPresent
+  existingSecret: mcphub-db-secret
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

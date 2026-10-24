@@ -1,0 +1,29 @@
+# Demo-only values. Credentials are supplied through mcphub-db-secret.
+namespace: mcphub
+storageClassName: local-path
+imagePullSecrets: []
+wordpress:
+  image: docker.io/library/mcphub-wordpress:demo
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  servicePort: 80
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+mariadb:
+  image: docker.io/library/mariadb@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873
+  imagePullPolicy: IfNotPresent
+  existingSecret: mcphub-db-secret
+  storage: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

@@ -1,6 +1,8 @@
 namespace: mcphub
 databaseHost: mcphub-mariadb.mcphub.svc.cluster.local
 provisionerImage: mcphub-gateway:security-v2
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
 secretName: mcphub-metadata-secret
 resources:
   requests:
@@ -9,3 +11,13 @@ resources:
   limits:
     cpu: 250m
     memory: 256Mi
+schemaMigration:
+  # Migrations run only when explicitly enabled. Supply a unique runId to retry
+  # a failed immutable Kubernetes Job without deleting its diagnostic record.
+  enabled: false
+  version: 5
+  runId: ""
+databaseDiagnostics:
+  # Opt-in read-only connectivity check; does not run schema initialization.
+  enabled: false
+  runId: ""

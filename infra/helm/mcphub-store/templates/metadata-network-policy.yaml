@@ -25,6 +25,12 @@ spec:
         - podSelector:
             matchLabels:
               app: mcphub-db-provisioner
+        - podSelector:
+            matchLabels:
+              app: mcphub-schema-migration
+        - podSelector:
+            matchLabels:
+              app: mcphub-db-diagnostic
       ports:
         - protocol: TCP
           port: 3306
