@@ -35,7 +35,7 @@ Upstream services stay behind the gateway instead of being exposed to clients.
 | Component | Link |
 |---|---|
 | Operations Dashboard | [sandeep-mcp-demo.duckdns.org/dashboard](https://sandeep-mcp-demo.duckdns.org/dashboard) |
-| WooCommerce Storefront | [sandeep-mcp-demo.duckdns.org](https://sandeep-mcp-demo.duckdns.org/) |
+| WooCommerce Storefront | [sandeep-mcp-demo.duckdns.org](https://sandeep-mcp-demo.duckdns.org/shop/) |
 | MCP Endpoint (Streamable HTTP) | `https://sandeep-mcp-demo.duckdns.org/mcp` |
 | WordPress / WooCommerce Admin | [sandeep-mcp-demo.duckdns.org/wp-admin](https://sandeep-mcp-demo.duckdns.org/wp-admin/) |
 
