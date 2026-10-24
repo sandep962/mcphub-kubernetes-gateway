@@ -57,34 +57,11 @@ finally {
 
 This creates or updates only the named Secret and does not print its values. Use unique strong credentials and a protected administrative terminal. Do not use this procedure to rotate credentials for an existing database without a coordinated account/Secret maintenance plan. The store chart supports `mariadb.existingSecret`; its Secret template is skipped when that value is set.
 
-## Build and deploy to the existing Kind cluster
+## Deploying application changes
 
-Confirm `kubectl config current-context` is the intended Kind context and that the existing MariaDB pod and PVC are healthy. Do not delete or recreate the cluster, store release, PVCs, or database pods for this update.
+The former copy-paste image tags and `helm upgrade --install` block was removed because it could drift from the effective release values and overwrite configuration. For an existing release, follow [the upgrade and rollback runbook](helm-upgrades-rollback.md): verify the context, current release values, rendered diff, and rollback revision before changing an image. Use [the VPS guide](vps-k3s-deployment.md) only for a fresh target cluster. Do not rerun metadata provisioning or migrations as routine application deployment steps.
 
-Build/load only the changed app images, create the metadata Secret as described above, then install the metadata chart before upgrading app deployments:
-
-```powershell
-docker build -f apps/gateway/Dockerfile -t mcphub-gateway:security-v2 .
-docker build -f apps/inventory-mcp/Dockerfile -t mcphub-inventory-mcp:persistent-v2 .
-docker build -f apps/support-mcp/Dockerfile -t mcphub-support-mcp:persistent-v2 .
-docker build -f apps/dashboard/Dockerfile -t mcphub-dashboard:security-v1 .
-kind load docker-image mcphub-gateway:security-v2 mcphub-inventory-mcp:persistent-v2 mcphub-support-mcp:persistent-v2 mcphub-dashboard:security-v1 --name kind
-
-helm upgrade --install mcphub-metadata .\infra\helm\mcphub-metadata --namespace mcphub
-kubectl wait --for=condition=complete job/mcphub-db-provisioner -n mcphub --timeout=180s
-helm upgrade --install mcphub-gateway .\infra\helm\mcphub-gateway --namespace mcphub
-helm upgrade --install mcphub-inventory-mcp .\infra\helm\mcphub-inventory-mcp --namespace mcphub
-helm upgrade --install mcphub-support-mcp .\infra\helm\mcphub-support-mcp --namespace mcphub
-helm upgrade --install mcphub-dashboard .\infra\helm\mcphub-dashboard --namespace mcphub
-
-kubectl rollout status deployment/mcphub-gateway -n mcphub
-kubectl rollout status deployment/mcphub-inventory-mcp -n mcphub
-kubectl rollout status deployment/mcphub-support-mcp -n mcphub
-kubectl rollout status deployment/mcphub-dashboard -n mcphub
-kubectl get deployments,pods,pvc -n mcphub
-```
-
-The gateway remains two replicas. All MCP and dashboard Services are ClusterIP. NetworkPolicy templates allow app-to-database connections only where needed, gateway-to-MCP calls, and dashboard-to-gateway requests. NetworkPolicy enforcement depends on the selected CNI; Kind's default network stack and a default K3s installation may not enforce these policies without a policy-capable CNI.
+The charts keep application Services internal. NetworkPolicies allow only required app-to-database, gateway-to-MCP, and dashboard-to-gateway traffic. Enforcement depends on a policy-capable CNI; verify the selected cluster actually enforces the policies.
 
 ## One-time administrator bootstrap
 
@@ -129,37 +106,18 @@ Remove-Variable apiKey,headers
 
 Keep exactly one API key per file. When storing separate keys, use separate protected files; do not append multiple keys to `admin-api-key.txt`. The check above prevents a multi-line file from being sent as one invalid `X-API-Key` value.
 
-To open the deployed dashboard and storefront, run `C:\MCPHub\scripts\start-local-ports.ps1`, then browse to `http://127.0.0.1:5174` and `http://127.0.0.1:8081`. The dashboard proxies `/api` to the internal gateway Service. The helper also provides the direct gateway/MCP endpoint at `http://127.0.0.1:8010` for external MCP clients. Use the initial admin key from the protected local file. These localhost-only HTTP forwards are for local development; expose K3s through an HTTPS reverse proxy with authentication rate limits and restrict Kubernetes Secret/Helm release access using RBAC and secret encryption.
+To open the local dashboard and storefront, run `C:\MCPHub\scripts\start-local-ports.ps1`, then browse to `http://127.0.0.1:5174` and `http://127.0.0.1:8081`. The dashboard proxies `/api` to the internal gateway Service. The helper also provides the direct gateway/MCP endpoint at `http://127.0.0.1:8010`. These loopback HTTP forwards are for local development. Remote deployments must expose authenticated routes over HTTPS and restrict Kubernetes Secret/Helm release access using RBAC and Secret encryption.
 
 ## Tests and troubleshooting
 
-```powershell
-Set-Location C:\MCPHub
-.\.venv\Scripts\python.exe -m compileall -q apps tests
-.\.venv\Scripts\python.exe -m pytest -q
-Push-Location .\apps\dashboard; npm run lint; npm run build; Pop-Location
-helm lint .\infra\helm\mcphub-gateway
-helm lint .\infra\helm\mcphub-dashboard
-helm lint .\infra\helm\mcphub-ingress
-helm lint .\infra\helm\mcphub-inventory-mcp
-helm lint .\infra\helm\mcphub-support-mcp
-helm lint .\infra\helm\mcphub-dashboard
-helm lint .\infra\helm\mcphub-metadata
-```
+Run the Python suite and dashboard test/lint/build commands listed in the [README validation section](../README.md#validation). For all eight Helm charts, use the environment-specific values and rendering checks in [the Helm runbook](helm-upgrades-rollback.md). The store chart requires password values from a protected file or existing Secret; never put real values in `--set` arguments.
 
 If `/tools` returns 401, provide `X-API-Key`; if it returns 503, check `/ready`, the metadata Secret reference, database service, and the provisioning Job logs without printing Secret values. A tool absent from `/tools` may be upstream-disconnected or not granted to the calling identity. `Unknown MCP tool` from `/call` means the gateway did not discover that tool in its current upstream set; check `/tools` first and inspect gateway/upstream pod logs for connection errors.
 
 ## K3s preparation
 
-The Azure K3s demo has been deployed and live-checked, including HTTPS routes with cert-manager-managed TLS and an HTTP-to-HTTPS redirect (checked 2026-10-24). The instructions here apply only to a **fresh** K3s installation: verify the target context and storage class; use `local-path` only for new claims; build reviewed images and import them to each eligible node or publish them to a registry; create `mcphub-db-secret` using the secure prompt workflow above; deploy store/MariaDB first; create the separate metadata Secret; then follow the metadata/app chart sequence. Use K3s Secret encryption and narrowly scoped RBAC, and expose authenticated interfaces only behind TLS. Do not switch Kubernetes contexts as part of the Kind workflow.
+For a new K3s cluster, use the [VPS deployment guide](vps-k3s-deployment.md) for image delivery, storage, TLS, installation order, backups, and recovery. The Secret and bootstrap procedures above apply there as well. Do not use a fresh-install sequence to alter the existing Azure releases or persistent data.
 
-## Demo recording checklist
+## Demo recording
 
-1. Show the architecture and Kind pods/PVCs, without opening Secret data.
-2. Open the dashboard and sign in with the admin key from the protected local file.
-3. Show `/tools` discovery across WooCommerce, Inventory, and Support; run `list_inventory` and a read-only WooCommerce query.
-4. Create a demo team and viewer identity; grant `inventory/list_inventory`; issue a key and copy it once.
-5. Demonstrate allowed inventory listing and denied write access with the viewer key, then show the audit rows as admin.
-6. Revoke the demo key, demonstrate its rejection, and finish with test/build output and the repository link. Do not show credentials, customer data, or secret values in the recording.
-
-On Windows, start/stop the screen recording with `Win+Alt+R` (Xbox Game Bar) or your preferred recorder. Save the video outside the repository unless the assignment explicitly asks for the video file in the repo. Before submitting source, run `git diff --check`, review `git status --short`, and confirm `.secrets/admin-api-key.txt` is ignored. Stage only the project files you reviewed, commit with a descriptive message, and push the assignment branch to its configured remote. Do not stage `.secrets`, local Helm values, `.env` files, or kubeconfig files.
+Use the [demo recording checklist](demo-recording-script.md) for the current sequence and privacy checks. Keep the recording outside the repository unless the assessment explicitly requires it.
