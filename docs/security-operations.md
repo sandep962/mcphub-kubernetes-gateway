@@ -120,4 +120,4 @@ For a new K3s cluster, use the [VPS deployment guide](vps-k3s-deployment.md) for
 
 ## Demo recording
 
-Use the [demo recording checklist](demo-recording-script.md) for the current sequence and privacy checks. Keep the recording outside the repository unless the assessment explicitly requires it.
+Keep recordings outside the repository unless the assessment explicitly requires them. Never show API keys, passwords, Secret values, or customer details in a recording.

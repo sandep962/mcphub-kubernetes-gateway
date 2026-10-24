@@ -11,7 +11,7 @@ WooCommerce · Inventory · Support
 ![Kubernetes](https://img.shields.io/badge/Deploy-Kubernetes%20%7C%20Helm-326CE5?logo=kubernetes&logoColor=white)
 ![MCP](https://img.shields.io/badge/Protocol-Streamable%20HTTP-6E56CF)
 
-[Azure demo](#azure-demo) · [Architecture](#architecture) · [Connect a client](#connect-an-mcp-client) · [Local development](#local-development) · [Validation](#validation)
+[Azure demo](#azure-demo) · [MCP endpoint verification](#mcp-endpoint-verification) · [Architecture](#architecture) · [Local development](#local-development) · [Validation](#validation)
 
 </div>
 
@@ -67,48 +67,13 @@ The MariaDB service hosts separate `mcphub` metadata and `wordpress` store datab
 
 The gateway applies bounded upstream discovery and tool-call deadlines. Discovery and execution failures are isolated per upstream; error responses use sanitized categories. A disabled upstream is excluded from discovery and calls. MariaDB DDL can auto-commit, so migration failures require inspection before retry; see [VPS deployment and recovery](docs/vps-k3s-deployment.md).
 
-## Connect an MCP client
+## MCP endpoint verification
 
-Use the HTTPS endpoint and a key issued for the intended identity. The key must have grants for the tools the client needs. Keep the key in the client's credential store or environment configuration; do not commit it or put it in shell history.
+MCP connectivity was tested directly from a terminal with `curl` against `https://sandeep-mcp-demo.duckdns.org/mcp`. The request used the `X-API-Key` header and sent an MCP `initialize` JSON-RPC request. Claude Code was not used or tested.
 
-### Claude Code
+The available PowerShell history does not contain the successful POST command or its response; it contains only a local GET to `/mcp` and a separate OAuth-metadata request. For that reason, this README records the verified test method and request details, but does not claim an HTTP status or reproduce an exact command that is not preserved.
 
-For clients supporting environment expansion, put a reference—not the key—in `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "mcphub": {
-      "type": "http",
-      "url": "https://sandeep-mcp-demo.duckdns.org/mcp",
-      "headers": { "X-API-Key": "${MCPHUB_API_KEY}" }
-    }
-  }
-}
-```
-
-Set `MCPHUB_API_KEY` through a protected local credential mechanism before starting Claude Code, then check the connection with `/mcp`. See the [Claude Code MCP configuration reference](https://code.claude.com/docs/en/mcp).
-
-Other MCP clients should be configured for **Streamable HTTP**, the `/mcp` URL, and the `X-API-Key` header. The exact configuration fields depend on the client. Do not connect an external client directly to an upstream MCP Service.
-
-### Safe initialization check (Bash or Git Bash)
-
-This prompts for the key without echo and passes it to curl through standard input. It sends an MCP `initialize` request and does not invoke a tool.
-
-```bash
-(
-  read -r -s -p "MCPHub API key: " MCPHUB_API_KEY
-  printf '\n'
-  curl --silent --show-error --include --config - <<EOF
-url = "https://sandeep-mcp-demo.duckdns.org/mcp"
-request = "POST"
-header = "Content-Type: application/json"
-header = "Accept: application/json, text/event-stream"
-header = "X-API-Key: ${MCPHUB_API_KEY}"
-data = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl-check\",\"version\":\"0.0.1\"}}}"
-EOF
-)
-```
+The endpoint uses Streamable HTTP. Other MCP clients can be configured with the same HTTPS URL and `X-API-Key` header, but client-specific integrations have not been verified here. Do not connect clients directly to upstream MCP Services or send keys over HTTP.
 
 ## Local development
 
@@ -174,4 +139,4 @@ Helm lint and render commands, with environment-specific values and release name
 - [Helm upgrades and rollback](docs/helm-upgrades-rollback.md) — existing release procedures and verification.
 - [Security and operations](docs/security-operations.md) — Secrets, identity lifecycle, permissions, and troubleshooting.
 - [Chat assistant](docs/chat-agent.md) · [OAuth](docs/oauth.md) · [WooCommerce MCP](docs/woocommerce-mcp.md) · [Local Ingress](docs/local-ingress.md).
-- [Demo recording checklist](docs/demo-recording-script.md) · [Bonus features and limitations](docs/bonus-features.md).
+- [Bonus features and limitations](docs/bonus-features.md).
